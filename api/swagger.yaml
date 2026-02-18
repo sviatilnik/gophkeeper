@@ -1,0 +1,627 @@
+openapi: 3.0.3
+info:
+  title: GophKeeper API
+  description: |
+    API для системы безопасного хранения приватных данных GophKeeper.
+    
+    Система позволяет пользователям безопасно хранить:
+    - Пары логин/пароль
+    - Произвольные текстовые данные
+    - Произвольные бинарные данные
+    - Данные банковских карт
+    
+    Все данные шифруются на клиенте перед отправкой на сервер.
+    Для доступа к защищенным эндпоинтам требуется токен аутентификации.
+  version: 1.0.0
+  contact:
+    name: GophKeeper Support
+    email: support@gophkeeper.example.com
+
+servers:
+  - url: http://localhost:8080/api
+    description: Локальный сервер разработки
+  - url: https://api.gophkeeper.example.com/api
+    description: Production сервер
+
+tags:
+  - name: auth
+    description: Аутентификация и авторизация
+  - name: secrets
+    description: Управление секретными данными
+  - name: sync
+    description: Синхронизация данных
+
+paths:
+  /register:
+    post:
+      tags:
+        - auth
+      summary: Регистрация нового пользователя
+      description: |
+        Регистрирует нового пользователя в системе.
+        После успешной регистрации автоматически выполняет вход и возвращает токен аутентификации.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCredentials'
+            example:
+              login: "user123"
+              password: "securePassword123"
+      responses:
+        '200':
+          description: Пользователь успешно зарегистрирован и авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                token:
+                  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  expires_at: 0
+                user:
+                  id: 1
+                  login: "user123"
+                  created_at: 1640995200
+        '400':
+          description: Неверный формат запроса или отсутствуют обязательные поля
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Login and password are required"
+        '409':
+          description: Пользователь с таким логином уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "User already exists"
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /login:
+    post:
+      tags:
+        - auth
+      summary: Вход пользователя в систему
+      description: Аутентифицирует пользователя и возвращает токен доступа
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCredentials'
+            example:
+              login: "user123"
+              password: "securePassword123"
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                token:
+                  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  expires_at: 0
+                user:
+                  id: 1
+                  login: "user123"
+                  created_at: 1640995200
+        '400':
+          description: Неверный формат запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Неверные учетные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid credentials"
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /secrets:
+    get:
+      tags:
+        - secrets
+      summary: Получить все секреты пользователя
+      description: Возвращает список всех секретов текущего авторизованного пользователя
+      operationId: getSecrets
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список секретов пользователя
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Secret'
+              example:
+                - id: 1
+                  user_id: 1
+                  type: "login_password"
+                  data: "base64encodedencrypteddata"
+                  metadata: "GitHub account"
+                  created_at: "2024-01-01T12:00:00Z"
+                  updated_at: "2024-01-01T12:00:00Z"
+                  version: 1
+                - id: 2
+                  user_id: 1
+                  type: "text"
+                  data: "base64encodedencrypteddata"
+                  metadata: "Important note"
+                  created_at: "2024-01-02T10:00:00Z"
+                  updated_at: "2024-01-02T10:00:00Z"
+                  version: 1
+        '401':
+          description: Токен отсутствует, невалиден или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Invalid or expired token"
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - secrets
+      summary: Создать новый секрет
+      description: Создает новый секрет для текущего авторизованного пользователя
+      operationId: createSecret
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecretRequest'
+            example:
+              type: "login_password"
+              data: "base64encodedencrypteddata"
+              metadata: "GitHub account"
+      responses:
+        '201':
+          description: Секрет успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Secret'
+              example:
+                id: 1
+                user_id: 1
+                type: "login_password"
+                data: "base64encodedencrypteddata"
+                metadata: "GitHub account"
+                created_at: "2024-01-01T12:00:00Z"
+                updated_at: "2024-01-01T12:00:00Z"
+                version: 1
+        '400':
+          description: Неверный формат запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Токен отсутствует, невалиден или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /secrets/{id}:
+    get:
+      tags:
+        - secrets
+      summary: Получить секрет по ID
+      description: Возвращает конкретный секрет по его идентификатору
+      operationId: getSecretById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Идентификатор секрета
+          schema:
+            type: integer
+            format: int64
+          example: 1
+      responses:
+        '200':
+          description: Секрет найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Secret'
+              example:
+                id: 1
+                user_id: 1
+                type: "login_password"
+                data: "base64encodedencrypteddata"
+                metadata: "GitHub account"
+                created_at: "2024-01-01T12:00:00Z"
+                updated_at: "2024-01-01T12:00:00Z"
+                version: 1
+        '400':
+          description: Неверный формат ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Токен отсутствует, невалиден или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Секрет не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Secret not found"
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - secrets
+      summary: Обновить секрет
+      description: Обновляет существующий секрет. Версия секрета увеличивается на 1.
+      operationId: updateSecret
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Идентификатор секрета
+          schema:
+            type: integer
+            format: int64
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSecretRequest'
+            example:
+              data: "base64encodedencrypteddata"
+              metadata: "Updated GitHub account"
+      responses:
+        '200':
+          description: Секрет успешно обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Secret'
+              example:
+                id: 1
+                user_id: 1
+                type: "login_password"
+                data: "base64encodedencrypteddata"
+                metadata: "Updated GitHub account"
+                created_at: "2024-01-01T12:00:00Z"
+                updated_at: "2024-01-03T15:30:00Z"
+                version: 2
+        '400':
+          description: Неверный формат запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Токен отсутствует, невалиден или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Секрет не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - secrets
+      summary: Удалить секрет
+      description: Удаляет секрет по его идентификатору
+      operationId: deleteSecret
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Идентификатор секрета
+          schema:
+            type: integer
+            format: int64
+          example: 1
+      responses:
+        '204':
+          description: Секрет успешно удален
+        '401':
+          description: Токен отсутствует, невалиден или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Секрет не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sync:
+    get:
+      tags:
+        - sync
+      summary: Синхронизация данных
+      description: |
+        Синхронизирует данные пользователя с сервером.
+        Возвращает все секреты пользователя для синхронизации между несколькими клиентами.
+      operationId: sync
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Данные успешно синхронизированы
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Secret'
+              example:
+                - id: 1
+                  user_id: 1
+                  type: "login_password"
+                  data: "base64encodedencrypteddata"
+                  metadata: "GitHub account"
+                  created_at: "2024-01-01T12:00:00Z"
+                  updated_at: "2024-01-01T12:00:00Z"
+                  version: 1
+                - id: 2
+                  user_id: 1
+                  type: "text"
+                  data: "base64encodedencrypteddata"
+                  metadata: "Important note"
+                  created_at: "2024-01-02T10:00:00Z"
+                  updated_at: "2024-01-02T10:00:00Z"
+                  version: 1
+        '401':
+          description: Токен отсутствует, невалиден или истек
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: |
+        Токен аутентификации, полученный при регистрации или входе.
+        Формат: Bearer <token>
+        Пример: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+  schemas:
+    UserCredentials:
+      type: object
+      required:
+        - login
+        - password
+      properties:
+        login:
+          type: string
+          description: Логин пользователя
+          example: "user123"
+          minLength: 1
+        password:
+          type: string
+          description: Пароль пользователя
+          example: "securePassword123"
+          minLength: 1
+          format: password
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Уникальный идентификатор пользователя
+          example: 1
+        login:
+          type: string
+          description: Логин пользователя
+          example: "user123"
+        created_at:
+          type: integer
+          format: int64
+          description: Время создания пользователя (Unix timestamp)
+          example: 1640995200
+
+    AuthToken:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Токен доступа для авторизации запросов
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expires_at:
+          type: integer
+          format: int64
+          description: Время истечения токена (Unix timestamp, 0 если не установлено)
+          example: 0
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          $ref: '#/components/schemas/AuthToken'
+        user:
+          $ref: '#/components/schemas/User'
+
+    SecretType:
+      type: string
+      enum:
+        - login_password
+        - text
+        - binary
+        - card
+      description: |
+        Тип секретных данных:
+        - login_password - пара логин/пароль
+        - text - произвольные текстовые данные
+        - binary - произвольные бинарные данные
+        - card - данные банковской карты
+      example: "login_password"
+
+    Secret:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Уникальный идентификатор секрета
+          example: 1
+        user_id:
+          type: integer
+          format: int64
+          description: Идентификатор владельца секрета
+          example: 1
+        type:
+          $ref: '#/components/schemas/SecretType'
+        data:
+          type: string
+          format: byte
+          description: Зашифрованные данные в формате base64
+          example: "base64encodedencrypteddata"
+        metadata:
+          type: string
+          description: Произвольная текстовая метаинформация о секрете
+          example: "GitHub account"
+        created_at:
+          type: string
+          format: date-time
+          description: Время создания секрета
+          example: "2024-01-01T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Время последнего обновления секрета
+          example: "2024-01-01T12:00:00Z"
+        version:
+          type: integer
+          format: int64
+          description: Версия секрета для синхронизации (увеличивается при каждом изменении)
+          example: 1
+
+    CreateSecretRequest:
+      type: object
+      required:
+        - type
+        - data
+      properties:
+        type:
+          $ref: '#/components/schemas/SecretType'
+        data:
+          type: string
+          format: byte
+          description: Зашифрованные данные в формате base64
+          example: "base64encodedencrypteddata"
+        metadata:
+          type: string
+          description: Произвольная текстовая метаинформация о секрете
+          example: "GitHub account"
+          default: ""
+
+    UpdateSecretRequest:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: string
+          format: byte
+          description: Обновленные зашифрованные данные в формате base64
+          example: "base64encodedencrypteddata"
+        metadata:
+          type: string
+          description: Обновленная текстовая метаинформация о секрете
+          example: "Updated GitHub account"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Описание ошибки
+          example: "Invalid credentials"
